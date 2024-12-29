@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { CategoryAPI, Category } from '../services/api';
+import { FaEdit, FaTrash } from 'react-icons/fa';
+import Button from '../components/Button';
 
 const Categories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCategory, setNewCategory] = useState('');
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -13,17 +16,10 @@ const Categories: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      console.log('Fetching categories...');
       const response = await CategoryAPI.getAll();
-      console.log('Categories response:', response);
       setCategories(response.data);
     } catch (error: any) {
-      console.error('Error fetching categories:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        statusText: error.response?.statusText
-      });
+      console.error('Error fetching categories:', error);
       setError('Failed to load categories');
     }
   };
@@ -39,73 +35,155 @@ const Categories: React.FC = () => {
       const category: Omit<Category, 'id'> = {
         name: newCategory.trim()
       };
-      console.log('Sending category request:', {
-        url: '/api/category/create',
-        data: category
-      });
-      const response = await CategoryAPI.add(category);
-      console.log('Add category response:', response);
+      await CategoryAPI.add(category);
       setNewCategory('');
-      await fetchCategories();
+      fetchCategories();
     } catch (error: any) {
-      console.error('Error adding category:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        config: error.config
+      console.error('Error adding category:', error);
+      setError('Failed to add category');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (category: Category) => {
+    setEditingCategory(category);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await CategoryAPI.update(editingCategory.id, {
+        name: editingCategory.name
       });
-      setError(error.response?.data?.message || 'Failed to add category');
+      setEditingCategory(null);
+      fetchCategories();
+    } catch (error: any) {
+      console.error('Error updating category:', error);
+      setError('Failed to update category');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this category?')) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await CategoryAPI.delete(id);
+      fetchCategories();
+    } catch (error: any) {
+      console.error('Error deleting category:', error);
+      setError('Failed to delete category');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Categories</h2>
-        
-        {/* Add Category Form */}
-        <form onSubmit={handleSubmit} className="mb-6">
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="Enter category name"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              disabled={loading || !newCategory.trim()}
-            >
-              {loading ? 'Adding...' : 'Add Category'}
-            </button>
-          </div>
-          {error && (
-            <p className="mt-2 text-red-500 text-sm">{error}</p>
-          )}
-        </form>
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-6">Categories</h1>
 
-        {/* Categories List */}
-        <div className="bg-white rounded-lg shadow-md">
-          <div className="divide-y">
-            {categories.length === 0 ? (
-              <p className="p-4 text-gray-500">No categories added yet</p>
-            ) : (
-              categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="p-4 flex justify-between items-center hover:bg-gray-50"
+      {/* Add Category Form */}
+      <form onSubmit={handleSubmit} className="mb-8">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            placeholder="Enter category name"
+            className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <Button type="submit" disabled={loading}>
+            Add Category
+          </Button>
+        </div>
+      </form>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Edit Category</h2>
+            <form onSubmit={handleUpdate}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editingCategory.name}
+                  onChange={(e) => setEditingCategory({
+                    ...editingCategory,
+                    name: e.target.value
+                  })}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => setEditingCategory(null)}
+                  variant="secondary"
                 >
-                  <span className="font-medium">{category.name}</span>
-                </div>
-              ))
-            )}
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  Save Changes
+                </Button>
+              </div>
+            </form>
           </div>
+        </div>
+      )}
+
+      {/* Categories List */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {categories.map((category) => (
+                <tr key={category.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">{category.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <button
+                      onClick={() => handleEdit(category)}
+                      className="text-blue-600 hover:text-blue-900 mr-3"
+                    >
+                      <FaEdit className="inline" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(category.id)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      <FaTrash className="inline" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

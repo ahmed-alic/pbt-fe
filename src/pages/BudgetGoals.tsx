@@ -4,6 +4,7 @@ import { BudgetGoalAPI, BudgetGoal } from '../services/api';
 const BudgetGoals: React.FC = () => {
   const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
   const [newGoal, setNewGoal] = useState<Omit<BudgetGoal, 'id'>>({
+    name: '',
     amount: 0,
     timePeriod: 'Monthly',
     currentSpending: 0
@@ -18,7 +19,21 @@ const BudgetGoals: React.FC = () => {
   const fetchBudgetGoals = async () => {
     try {
       const response = await BudgetGoalAPI.getAll();
-      setBudgetGoals(response.data);
+      console.log('Budget Goals Response:', response);
+      
+      if (!Array.isArray(response.data)) {
+        console.error('Budget goals data is not an array:', response.data);
+        setBudgetGoals([]);
+        return;
+      }
+
+      // Validate budget goals data
+      const validBudgetGoals = response.data.filter(goal => 
+        goal && typeof goal.amount === 'number' && typeof goal.currentSpending === 'number'
+      );
+
+      console.log('Valid Budget Goals:', validBudgetGoals);
+      setBudgetGoals(validBudgetGoals);
     } catch (error) {
       console.error('Error fetching budget goals:', error);
       setError('Failed to load budget goals');
@@ -35,6 +50,7 @@ const BudgetGoals: React.FC = () => {
     try {
       await BudgetGoalAPI.add(newGoal);
       setNewGoal({
+        name: '',
         amount: 0,
         timePeriod: 'Monthly',
         currentSpending: 0
@@ -66,6 +82,20 @@ const BudgetGoals: React.FC = () => {
         {/* Add Budget Goal Form */}
         <form onSubmit={handleSubmit} className="mb-6 bg-white p-6 rounded-lg shadow-md">
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </label>
+              <input
+                type="text"
+                value={newGoal.name}
+                onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+                placeholder="Enter name"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={loading}
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Amount
@@ -112,49 +142,32 @@ const BudgetGoals: React.FC = () => {
         </form>
 
         {/* Budget Goals List */}
-        <div className="space-y-4">
-          {budgetGoals.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No budget goals added yet</p>
-          ) : (
-            budgetGoals.map((goal) => (
-              <div
-                key={goal.id}
-                className="bg-white rounded-lg shadow-md p-4"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-semibold text-lg">${goal.amount.toLocaleString()}</h3>
-                    <p className="text-gray-600">{goal.timePeriod}</p>
-                  </div>
-                  <button
-                    onClick={() => goal.id && handleDelete(goal.id)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </div>
-                
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Progress</span>
-                    <span>${goal.currentSpending.toLocaleString()} spent</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div
-                      className={`h-2.5 rounded-full ${
-                        (goal.currentSpending / goal.amount) > 0.9
-                          ? 'bg-red-500'
-                          : (goal.currentSpending / goal.amount) > 0.7
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                      }`}
-                      style={{ width: `${Math.min((goal.currentSpending / goal.amount) * 100, 100)}%` }}
-                    />
+        <div className="mt-8">
+          <h3 className="text-xl font-bold mb-4">Current Budget Goals</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {budgetGoals && budgetGoals.length > 0 ? (
+              budgetGoals.map(goal => (
+                <div key={goal.id} className="bg-white p-6 rounded-lg shadow-md">
+                  <h4 className="font-semibold text-lg mb-2">{goal.name}</h4>
+                  <p className="text-gray-600">Amount: ${goal.amount?.toFixed(2) || '0.00'}</p>
+                  <p className="text-gray-600">Current Spending: ${goal.currentSpending?.toFixed(2) || '0.00'}</p>
+                  <p className="text-gray-600">Time Period: {goal.timePeriod}</p>
+                  <div className="mt-4 flex justify-end space-x-2">
+                    <button
+                      onClick={() => handleDelete(goal.id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="col-span-3 text-center text-gray-500 py-8">
+                No budget goals found. Create one above!
               </div>
-            ))
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

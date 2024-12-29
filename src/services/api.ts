@@ -14,6 +14,7 @@ export interface Category {
 
 export interface BudgetGoal {
   id: number;
+  name: string;
   amount: number;
   timePeriod: string;
   currentSpending: number;
@@ -40,15 +41,44 @@ export const TransactionAPI = {
   getAll: () => api.get<Transaction[]>('/transaction/'),
   getById: (id: number) => api.get<Transaction>(`/transaction/${id}`),
   add: (transaction: Omit<Transaction, 'id'>) => api.post<Transaction>('/transaction/create', transaction),
+  update: (id: number, transaction: Omit<Transaction, 'id'>) => api.put<Transaction>(`/transaction/update/${id}`, transaction),
   delete: (id: number) => api.delete(`/transaction/${id}`),
   suggestCategory: (transactionId: number) => api.get<string>(`/transaction/suggest/${transactionId}`),
-  getSummary: () => api.get<TransactionSummary>('/transaction/summary'),
+  getSummary: () => api.get<TransactionSummary>('/transaction/summary')
 };
 
 export const CategoryAPI = {
-  getAll: () => api.get<Category[]>('/category/'),
+  getAll: async () => {
+    try {
+      console.log('Fetching all categories...');
+      const response = await api.get<Category[]>('/category');
+      console.log('Categories response:', response);
+      if (!response.data || !Array.isArray(response.data)) {
+        console.error('Invalid categories response:', response);
+        throw new Error('Invalid categories response');
+      }
+      return response;
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      throw error;
+    }
+  },
   add: (category: Omit<Category, 'id'>) => api.post<Category>('/category/create', category),
-  suggestForTransaction: (description: string) => api.get<string>(`/category/suggest/${description}`),
+  update: (id: number, category: Omit<Category, 'id'>) => api.put<Category>(`/category/update/${id}`, category),
+  delete: (id: number) => api.delete(`/category/${id}`),
+  suggestForTransaction: async (description: string) => {
+    console.log('Making suggestion request for:', description);
+    try {
+      const url = `/category/suggest?description=${encodeURIComponent(description)}`;
+      console.log('Full request URL:', `http://localhost:8080/api${url}`);
+      const response = await api.get<string>(url);
+      console.log('Raw response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in suggestForTransaction:', error);
+      throw error;
+    }
+  },
 };
 
 export const BudgetGoalAPI = {
