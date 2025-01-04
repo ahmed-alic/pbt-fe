@@ -37,6 +37,20 @@ export interface TransactionSummary {
   recentTransactions: Transaction[];
 }
 
+export interface MonthlySpending {
+  category: string;
+  amount: number;
+  percentage: number;
+  transactionCount: number;
+}
+
+export interface MonthlyReport {
+  startDate: string;
+  endDate: string;
+  totalSpending: number;
+  spendingByCategory: MonthlySpending[];
+}
+
 export const TransactionAPI = {
   getAll: () => api.get<Transaction[]>('/transaction/'),
   getById: (id: number) => api.get<Transaction>(`/transaction/${id}`),
@@ -53,9 +67,8 @@ export const CategoryAPI = {
       console.log('Fetching all categories...');
       const response = await api.get<Category[]>('/category');
       console.log('Categories response:', response);
-      if (!response.data || !Array.isArray(response.data)) {
-        console.error('Invalid categories response:', response);
-        throw new Error('Invalid categories response');
+      if (!response.data) {
+        throw new Error('No data received from categories endpoint');
       }
       return response;
     } catch (error) {
@@ -63,19 +76,52 @@ export const CategoryAPI = {
       throw error;
     }
   },
-  add: (category: Omit<Category, 'id'>) => api.post<Category>('/category/create', category),
-  update: (id: number, category: Omit<Category, 'id'>) => api.put<Category>(`/category/update/${id}`, category),
-  delete: (id: number) => api.delete(`/category/${id}`),
-  suggestForTransaction: async (description: string) => {
-    console.log('Making suggestion request for:', description);
+
+  add: async (category: Omit<Category, 'id'>) => {
     try {
-      const url = `/category/suggest?description=${encodeURIComponent(description)}`;
-      console.log('Full request URL:', `http://localhost:8080/api${url}`);
-      const response = await api.get<string>(url);
-      console.log('Raw response:', response);
+      console.log('Creating category:', category);
+      const response = await api.post<Category>('/category/create', category);
+      console.log('Category created:', response.data);
       return response;
     } catch (error) {
-      console.error('Error in suggestForTransaction:', error);
+      console.error('Error creating category:', error);
+      throw error;
+    }
+  },
+
+  update: async (id: number, category: Omit<Category, 'id'>) => {
+    try {
+      console.log(`Updating category ${id}:`, category);
+      const response = await api.put<Category>(`/category/${id}`, category);
+      console.log('Category updated:', response.data);
+      return response;
+    } catch (error) {
+      console.error('Error updating category:', error);
+      throw error;
+    }
+  },
+
+  delete: async (id: number) => {
+    try {
+      console.log('Deleting category:', id);
+      const response = await api.delete(`/category/${id}`);
+      console.log('Category deleted');
+      return response;
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      throw error;
+    }
+  },
+
+  suggestForTransaction: async (description: string) => {
+    try {
+      console.log('Requesting category suggestion for:', description);
+      const url = `/category/suggest?description=${encodeURIComponent(description)}`;
+      const response = await api.get<string>(url);
+      console.log('Category suggestion:', response.data);
+      return response;
+    } catch (error) {
+      console.error('Error getting category suggestion:', error);
       throw error;
     }
   },
@@ -88,6 +134,53 @@ export const BudgetGoalAPI = {
   update: (id: number, budgetGoal: Omit<BudgetGoal, 'id'>) => 
     api.put<BudgetGoal>(`/budget-goal/update/${id}`, budgetGoal),
   delete: (id: number) => api.delete(`/budget-goal/${id}`),
+};
+
+export const ReportAPI = {
+  getMonthlySpending: (startDate: string, endDate: string, categories?: string[]) => {
+    const params = new URLSearchParams();
+    params.append('startDate', startDate);
+    params.append('endDate', endDate);
+    if (categories && categories.length > 0) {
+      categories.forEach(category => params.append('categories', category));
+    }
+    return api.get<MonthlyReport>(`/reports/monthly-spending?${params.toString()}`);
+  },
+  exportToPDF: async (startDate: string, endDate: string, categories?: string[]) => {
+    const params = new URLSearchParams();
+    params.append('startDate', startDate);
+    params.append('endDate', endDate);
+    if (categories && categories.length > 0) {
+      categories.forEach(category => params.append('categories', category));
+    }
+    
+    const response = await api.get(`/reports/export-pdf?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    // Create a URL for the blob
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    
+    // Create a temporary link element
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Set the filename from the Content-Disposition header or use a default
+    const contentDisposition = response.headers['content-disposition'];
+    const filename = contentDisposition
+      ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+      : `spending-report-${startDate}-to-${endDate}.pdf`;
+    
+    link.setAttribute('download', filename);
+    
+    // Append link to body, click it, and remove it
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up the URL
+    window.URL.revokeObjectURL(url);
+  }
 };
 
 export default api;

@@ -71,7 +71,7 @@ const AddTransaction: React.FC = () => {
     };
 
     fetchData();
-  }, [transaction.type]);
+  }, [transaction.type, transaction.budgetgoal]);
 
   // Enhanced category suggestion with debounce and loading state
   useEffect(() => {
