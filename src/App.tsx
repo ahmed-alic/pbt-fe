@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import AddTransaction from './pages/AddTransaction';
 import Categories from './pages/Categories';
 import BudgetGoals from './pages/BudgetGoals';
+import Reports from './pages/Reports';
 
 const App: React.FC = () => {
   return (
@@ -22,6 +23,9 @@ const App: React.FC = () => {
                 </Link>
                 <Link to="/budget-goals" className="flex items-center px-2 py-2 text-gray-700 hover:text-gray-900 ml-4">
                   Budget Goals
+                </Link>
+                <Link to="/reports" className="flex items-center px-2 py-2 text-gray-700 hover:text-gray-900 ml-4">
+                  Reports
                 </Link>
               </div>
               <div className="flex items-center">
@@ -43,6 +47,7 @@ const App: React.FC = () => {
             <Route path="/add-transaction" element={<AddTransaction />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/budget-goals" element={<BudgetGoals />} />
+            <Route path="/reports" element={<Reports />} />
           </Routes>
         </main>
       </div>
