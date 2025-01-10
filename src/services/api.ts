@@ -1,10 +1,11 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: 'https://pbt-be-live.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
-  }
+  },
+  withCredentials: true
 });
 
 export interface Category {
@@ -146,40 +147,64 @@ export const ReportAPI = {
     }
     return api.get<MonthlyReport>(`/reports/monthly-spending?${params.toString()}`);
   },
-  exportToPDF: async (startDate: string, endDate: string, categories?: string[]) => {
-    const params = new URLSearchParams();
-    params.append('startDate', startDate);
-    params.append('endDate', endDate);
-    if (categories && categories.length > 0) {
-      categories.forEach(category => params.append('categories', category));
+  exportToPDF: async (startDate: string, endDate: string, categories?: string[], reportType: 'monthly' | 'category' = 'monthly') => {
+    try {
+      console.log('Exporting PDF with params:', { startDate, endDate, categories, reportType });
+      
+      const params = new URLSearchParams();
+      params.append('startDate', startDate);
+      params.append('endDate', endDate);
+      params.append('reportType', reportType);
+      if (categories && categories.length > 0) {
+        // Send categories as a comma-separated string instead of multiple parameters
+        params.append('categories', categories.join(','));
+      }
+      
+      const response = await api.get(`/reports/export-pdf?${params.toString()}`, {
+        responseType: 'blob',
+        headers: {
+          'Accept': 'application/pdf',
+        }
+      });
+      
+      if (response.status === 200) {
+        // Create a URL for the blob
+        const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+        
+        // Create a temporary link element
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Set the filename based on the report type
+        const filename = `${reportType}-report-${startDate}-to-${endDate}.pdf`;
+        link.setAttribute('download', filename);
+        
+        // Append link to body, click it, and remove it
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up the URL
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+    } catch (error: any) {
+      console.error('PDF export error:', error);
+      if (error.response?.data instanceof Blob) {
+        // Try to read the error message from the blob
+        const text = await error.response.data.text();
+        console.error('Error response text:', text);
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.message || 'Failed to export PDF');
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+          throw new Error('Failed to export PDF');
+        }
+      }
+      throw error;
     }
-    
-    const response = await api.get(`/reports/export-pdf?${params.toString()}`, {
-      responseType: 'blob'
-    });
-    
-    // Create a URL for the blob
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    
-    // Create a temporary link element
-    const link = document.createElement('a');
-    link.href = url;
-    
-    // Set the filename from the Content-Disposition header or use a default
-    const contentDisposition = response.headers['content-disposition'];
-    const filename = contentDisposition
-      ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-      : `spending-report-${startDate}-to-${endDate}.pdf`;
-    
-    link.setAttribute('download', filename);
-    
-    // Append link to body, click it, and remove it
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Clean up the URL
-    window.URL.revokeObjectURL(url);
   }
 };
 
