@@ -10,7 +10,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const navigation = [
     { name: 'Dashboard', path: '/' },
-    { name: 'Transactions', path: '/transactions' },
   ];
 
   return (
