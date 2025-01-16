@@ -2,14 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Container, Paper, Typography, Box, FormControl, 
   InputLabel, Select, MenuItem, SelectChangeEvent,
-  Grid, CircularProgress, Button
+  Grid, CircularProgress, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
+  LineChart, Line
 } from 'recharts';
-import { ReportAPI, CategoryAPI, MonthlyReport, Category } from '../services/api';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { ReportAPI, CategoryAPI, MonthlyReport, Category, MonthlyTrendData, Transaction } from '../services/api';
+import { format, startOfMonth, endOfMonth, subMonths, parse } from 'date-fns';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -21,6 +23,11 @@ const Reports: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
+  const [trendData, setTrendData] = useState<MonthlyTrendData[]>([]);
+  const [selectedView, setSelectedView] = useState<'bar' | 'trend'>('bar');
+  const [selectedTransactions, setSelectedTransactions] = useState<Transaction[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -61,6 +68,49 @@ const Reports: React.FC = () => {
     }
   }, [timeRange, selectedCategories]);
 
+  const fetchTrendData = useCallback(async () => {
+    try {
+      let startDate: Date;
+      let endDate: Date;
+
+      switch (timeRange) {
+        case 'current':
+          startDate = startOfMonth(new Date());
+          endDate = endOfMonth(new Date());
+          break;
+        case 'last':
+          startDate = startOfMonth(subMonths(new Date(), 1));
+          endDate = endOfMonth(subMonths(new Date(), 1));
+          break;
+        case 'last3':
+          startDate = startOfMonth(subMonths(new Date(), 3));
+          endDate = endOfMonth(new Date());
+          break;
+        default:
+          startDate = startOfMonth(new Date());
+          endDate = endOfMonth(new Date());
+      }
+
+      console.log('Fetching trend data:', {
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+        selectedCategories
+      });
+
+      const response = await ReportAPI.getCategoryTrends(
+        format(startDate, 'yyyy-MM-dd'),
+        format(endDate, 'yyyy-MM-dd'),
+        selectedCategories.length > 0 ? selectedCategories : undefined
+      );
+
+      console.log('Received trend data:', response.data);
+      setTrendData(response.data.trends);
+    } catch (err) {
+      console.error('Error fetching trends:', err);
+      setError('Failed to load trend data');
+    }
+  }, [timeRange, selectedCategories]);
+
   const loadCategories = async () => {
     try {
       const response = await CategoryAPI.getAll();
@@ -71,9 +121,14 @@ const Reports: React.FC = () => {
   };
 
   useEffect(() => {
+    console.log('View type changed:', selectedView);
     loadCategories();
-    fetchReport();
-  }, [fetchReport]);
+    if (selectedView === 'bar') {
+      fetchReport();
+    } else {
+      fetchTrendData();
+    }
+  }, [fetchReport, fetchTrendData, selectedView]);
 
   const handleTimeRangeChange = (event: SelectChangeEvent) => {
     setTimeRange(event.target.value);
@@ -120,6 +175,55 @@ const Reports: React.FC = () => {
     }
   };
 
+  const handleBarClick = async (data: any) => {
+    try {
+      setSelectedCategory(data.category);
+      let startDate: Date;
+      let endDate: Date;
+
+      switch (timeRange) {
+        case 'current':
+          startDate = startOfMonth(new Date());
+          endDate = endOfMonth(new Date());
+          break;
+        case 'last':
+          startDate = startOfMonth(subMonths(new Date(), 1));
+          endDate = endOfMonth(subMonths(new Date(), 1));
+          break;
+        case 'last3':
+          startDate = startOfMonth(subMonths(new Date(), 3));
+          endDate = endOfMonth(new Date());
+          break;
+        default:
+          startDate = startOfMonth(new Date());
+          endDate = endOfMonth(new Date());
+      }
+
+      const response = await ReportAPI.getCategoryTransactions(
+        format(startDate, 'yyyy-MM-dd'),
+        format(endDate, 'yyyy-MM-dd'),
+        data.category
+      );
+      
+      // Filter transactions by category, safely handling undefined
+      const filteredTransactions = response.data.filter(
+        transaction => transaction.category?.name === data.category
+      );
+      
+      setSelectedTransactions(filteredTransactions);
+      setDialogOpen(true);
+    } catch (err) {
+      console.error('Error fetching transactions:', err);
+      setError('Failed to load transactions');
+    }
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setSelectedTransactions([]);
+    setSelectedCategory('');
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -136,7 +240,7 @@ const Reports: React.FC = () => {
         </Typography>
 
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <FormControl fullWidth>
               <InputLabel>Time Range</InputLabel>
               <Select
@@ -150,7 +254,7 @@ const Reports: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <FormControl fullWidth>
               <InputLabel>Filter Categories</InputLabel>
               <Select
@@ -164,6 +268,19 @@ const Reports: React.FC = () => {
                     {category.name}
                   </MenuItem>
                 ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth>
+              <InputLabel>View Type</InputLabel>
+              <Select
+                value={selectedView}
+                label="View Type"
+                onChange={(e) => setSelectedView(e.target.value as 'bar' | 'trend')}
+              >
+                <MenuItem value="bar">Bar Chart</MenuItem>
+                <MenuItem value="trend">Trend Lines</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -186,7 +303,7 @@ const Reports: React.FC = () => {
           </Typography>
         )}
 
-        {report && (
+        {selectedView === 'bar' && report && (
           <>
             <Typography variant="h6" sx={{ mt: 4 }}>
               Total Spending: ${report.totalSpending.toFixed(2)}
@@ -201,9 +318,17 @@ const Reports: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" />
                   <YAxis />
-                  <Tooltip />
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                  />
                   <Legend />
-                  <Bar dataKey="amount" fill="#8884d8" name="Amount ($)" />
+                  <Bar 
+                    dataKey="amount" 
+                    fill="#8884d8" 
+                    name="Amount" 
+                    onClick={handleBarClick}
+                    cursor="pointer"
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </Box>
@@ -234,7 +359,93 @@ const Reports: React.FC = () => {
             </Box>
           </>
         )}
+
+        {selectedView === 'trend' && (
+          <Box sx={{ mt: 4, height: 400 }}>
+            <Typography variant="h6" gutterBottom>
+              Category Spending Trends
+            </Typography>
+            {loading ? (
+              <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                <CircularProgress />
+              </Box>
+            ) : trendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="month" 
+                    tickFormatter={(value) => format(parse(value, 'yyyy-MM', new Date()), 'MMM yyyy')}
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => `$${value.toFixed(0)}`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                    labelFormatter={(label) => format(parse(label as string, 'yyyy-MM', new Date()), 'MMMM yyyy')}
+                  />
+                  <Legend />
+                  {Object.keys(trendData[0].categoryData).map((category, index) => (
+                    <Line
+                      key={category}
+                      type="monotone"
+                      dataKey={`categoryData.${category}`}
+                      stroke={COLORS[index % COLORS.length]}
+                      name={category}
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 8 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                <Typography color="text.secondary">No trend data available</Typography>
+              </Box>
+            )}
+          </Box>
+        )}
       </Paper>
+
+      {/* Transaction Details Dialog */}
+      <Dialog 
+        open={dialogOpen} 
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Transactions for {selectedCategory}
+        </DialogTitle>
+        <DialogContent>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                  <TableCell>Type</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {selectedTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>{format(new Date(transaction.date), 'MMM dd, yyyy')}</TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell align="right">${transaction.amount.toFixed(2)}</TableCell>
+                    <TableCell>{transaction.type}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

@@ -1,12 +1,51 @@
 import axios from 'axios';
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'https://pbt-be-live.onrender.com/api';
+
 const api = axios.create({
-  baseURL: 'https://pbt-be-live.onrender.com/api',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true
 });
+
+// Add request interceptor
+api.interceptors.request.use(
+  config => {
+    console.log('API Request:', {
+      method: config.method,
+      url: `${config.baseURL || ''}${config.url || ''}`,
+      data: config.data,
+      headers: config.headers
+    });
+    return config;
+  },
+  error => {
+    console.error('Request Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor
+api.interceptors.response.use(
+  response => {
+    console.log('API Response:', {
+      status: response.status,
+      data: response.data,
+      headers: response.headers
+    });
+    return response;
+  },
+  error => {
+    console.error('Response Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    return Promise.reject(error);
+  }
+);
 
 export interface Category {
   id: number;
@@ -52,6 +91,17 @@ export interface MonthlyReport {
   spendingByCategory: MonthlySpending[];
 }
 
+export interface MonthlyTrendData {
+  month: string;
+  categoryData: {
+    [category: string]: number;
+  };
+}
+
+export interface CategoryTrendResponse {
+  trends: MonthlyTrendData[];
+}
+
 export const TransactionAPI = {
   getAll: () => api.get<Transaction[]>('/transaction/'),
   getById: (id: number) => api.get<Transaction>(`/transaction/${id}`),
@@ -77,7 +127,6 @@ export const CategoryAPI = {
       throw error;
     }
   },
-
   add: async (category: Omit<Category, 'id'>) => {
     try {
       console.log('Creating category:', category);
@@ -89,7 +138,6 @@ export const CategoryAPI = {
       throw error;
     }
   },
-
   update: async (id: number, category: Omit<Category, 'id'>) => {
     try {
       console.log(`Updating category ${id}:`, category);
@@ -101,7 +149,6 @@ export const CategoryAPI = {
       throw error;
     }
   },
-
   delete: async (id: number) => {
     try {
       console.log('Deleting category:', id);
@@ -113,7 +160,6 @@ export const CategoryAPI = {
       throw error;
     }
   },
-
   suggestForTransaction: async (description: string) => {
     try {
       console.log('Requesting category suggestion for:', description);
@@ -125,16 +171,15 @@ export const CategoryAPI = {
       console.error('Error getting category suggestion:', error);
       throw error;
     }
-  },
+  }
 };
 
 export const BudgetGoalAPI = {
   getAll: () => api.get<BudgetGoal[]>('/budget-goal/'),
   getById: (id: number) => api.get<BudgetGoal>(`/budget-goal/${id}`),
   add: (budgetGoal: Omit<BudgetGoal, 'id'>) => api.post<BudgetGoal>('/budget-goal/create', budgetGoal),
-  update: (id: number, budgetGoal: Omit<BudgetGoal, 'id'>) => 
-    api.put<BudgetGoal>(`/budget-goal/update/${id}`, budgetGoal),
-  delete: (id: number) => api.delete(`/budget-goal/${id}`),
+  update: (id: number, budgetGoal: Omit<BudgetGoal, 'id'>) => api.put<BudgetGoal>(`/budget-goal/update/${id}`, budgetGoal),
+  delete: (id: number) => api.delete(`/budget-goal/${id}`)
 };
 
 export const ReportAPI = {
@@ -147,6 +192,24 @@ export const ReportAPI = {
     }
     return api.get<MonthlyReport>(`/reports/monthly-spending?${params.toString()}`);
   },
+
+  getCategoryTransactions: (startDate: string, endDate: string, category: string) => {
+    const params = new URLSearchParams();
+    params.append('startDate', startDate);
+    params.append('endDate', endDate);
+    return api.get<Transaction[]>(`/transaction/date-range?${params.toString()}`);
+  },
+
+  getCategoryTrends: (startDate: string, endDate: string, categories?: string[]) => {
+    const params = new URLSearchParams();
+    params.append('startDate', startDate);
+    params.append('endDate', endDate);
+    if (categories && categories.length > 0) {
+      categories.forEach(category => params.append('categories', category));
+    }
+    return api.get<CategoryTrendResponse>(`/reports/category-trends?${params.toString()}`);
+  },
+
   exportToPDF: async (startDate: string, endDate: string, categories?: string[], reportType: 'monthly' | 'category' = 'monthly') => {
     try {
       console.log('Exporting PDF with params:', { startDate, endDate, categories, reportType });
